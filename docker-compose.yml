@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: 'postgres'
+    volumes:
+      - "pg_data:/var/lib/postgresql/data"
+    extra_hosts:
+      - "host.docker.internal:172.19.0.1"
+    ports:
+      - "25432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: whatbot
+
+volumes:
+  pg_data:
+    driver: local
