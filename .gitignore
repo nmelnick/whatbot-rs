@@ -2,5 +2,6 @@
 
 /target
 **/*.rs.bk
+*.db
 Cargo.lock
 conf/whatbot.toml

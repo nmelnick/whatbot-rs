@@ -2,7 +2,7 @@ services:
   postgres:
     image: 'postgres'
     volumes:
-      - "pg_data:/var/lib/postgresql/data"
+      - "wb_pg_data:/var/lib/postgresql/data"
     extra_hosts:
       - "host.docker.internal:172.19.0.1"
     ports:
@@ -12,5 +12,5 @@ services:
       POSTGRES_DB: whatbot
 
 volumes:
-  pg_data:
+  wb_pg_data:
     driver: local

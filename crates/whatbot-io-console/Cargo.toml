@@ -1,0 +1,12 @@
+[package]
+name = "whatbot-io-console"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+whatbot-core = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

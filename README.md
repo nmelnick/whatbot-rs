@@ -6,4 +6,10 @@ but written in Rust.
 
 [what](./doc/what.md)?
 
+This is still in progress. Rust skills are still rusty.
+
+AI was used to flesh out test harnesses, unit tests, and integration tests, as
+the original whatbot's test architecture was terrible, and wanted a way to
+recreate functionality. It probably needs a refactor as this matures.
+
 > Be excellent to each other and party on, dudes.

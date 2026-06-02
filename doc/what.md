@@ -56,7 +56,6 @@ whatbot/
    - whatbot-core/       Types, Command trait, Dispatcher
    - whatbot-storage/    The sqlx pool, migrations runner, repositories
    - whatbot-io-console/ Stdin/stdout IO, mostly for dev
-   - whatbot-io-discord/ Discord IO through the serenity library
    - whatbot-commands/   Built-in commands
    - whatbot/            Binary
  - migrations/           Managed SQL

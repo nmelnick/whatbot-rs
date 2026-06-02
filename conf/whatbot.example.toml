@@ -1,0 +1,27 @@
+# whatbot example configuration.
+# Copy to conf/whatbot.toml and edit.
+
+[bot]
+name = "whatbot"
+
+[database]
+url = "postgres://whatbot:whatbot@localhost/whatbot"
+
+# Optional. Transcript of every inbound message and outbound reply ndependent
+# from the log.
+# [transcript]
+# file = "/var/log/whatbot-transcript.log"
+
+# One [[io]] block per connection. Multiple are allowed, the bot connects
+# to all of them and shares its memory across them.
+
+[[io]]
+kind = "console"
+# id = "console-dev"   # optional: override the default service id ("console")
+user = "user"
+
+# Per-command configuration.
+# Every command honors a shared `enabled` flag.
+#
+# [commands.karma]
+# enabled = false                # don't install the Karma command at all
