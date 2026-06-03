@@ -4,15 +4,13 @@
 //! interact through the dispatcher: tier short-circuits, silent
 //! consumers, ambient retrieval.
 
-use std::sync::Arc;
-
-use whatbot_commands::{Factoid, FactoidListener, FactoidStore, SqlFactoidStore};
+use whatbot_commands::{Factoid, FactoidListener};
 use whatbot_core::BotHarness;
 use whatbot_test_support::Pg;
 
-async fn fresh_factoid_store() -> Arc<dyn FactoidStore> {
+async fn fresh_store() -> std::sync::Arc<whatbot_storage::Store> {
     let pg = Pg::shared().await;
-    Arc::new(SqlFactoidStore::new(pg.fresh_store().await))
+    pg.fresh_store().await
 }
 
 /// FactoidListener at `Last` should fire for a bare known subject when
@@ -20,10 +18,10 @@ async fn fresh_factoid_store() -> Arc<dyn FactoidStore> {
 /// listener loop works through the real dispatcher.
 #[tokio::test]
 async fn factoid_listener_responds_to_bare_subject() {
-    let factoid_store = fresh_factoid_store().await;
+    let store = fresh_store().await;
     let bot = BotHarness::builder()
-        .install(Factoid::new(factoid_store.clone()))
-        .install(FactoidListener::new(factoid_store))
+        .install(Factoid::new(store.clone()))
+        .install(FactoidListener::new(store))
         .build()
         .await;
 
@@ -36,10 +34,10 @@ async fn factoid_listener_responds_to_bare_subject() {
 /// `FactoidListener` at Last so we don't get a double-reply.
 #[tokio::test]
 async fn what_is_does_not_double_reply_via_listener() {
-    let factoid_store = fresh_factoid_store().await;
+    let store = fresh_store().await;
     let bot = BotHarness::builder()
-        .install(Factoid::new(factoid_store.clone()))
-        .install(FactoidListener::new(factoid_store))
+        .install(Factoid::new(store.clone()))
+        .install(FactoidListener::new(store))
         .build()
         .await;
 

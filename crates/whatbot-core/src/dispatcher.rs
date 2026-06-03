@@ -12,6 +12,7 @@ use crate::event::{Event, RawEvent};
 use crate::identity::Account;
 use crate::mentions::{default_mention_renderer, MentionRenderer};
 use crate::message::Message;
+use crate::monitor::{Monitor, MonitorCommand};
 use crate::reply::{Destination, Reply};
 use crate::state::StateMap;
 use crate::transcript::{Direction, TranscriptEntry, TranscriptHandle};
@@ -30,6 +31,10 @@ impl Registry {
     pub fn install(&mut self, cmd: Arc<dyn Command>) {
         let p = cmd.meta().priority;
         self.by_priority.entry(p).or_default().push(cmd);
+    }
+
+    pub fn install_monitor<M: Monitor + 'static>(&mut self, monitor: M) {
+        self.install(Arc::new(MonitorCommand::new(monitor)));
     }
 
     pub fn commands_at(&self, priority: Priority) -> &[Arc<dyn Command>] {

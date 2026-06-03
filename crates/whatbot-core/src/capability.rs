@@ -25,7 +25,7 @@ impl CapabilitySet {
         Self(HashSet::new())
     }
 
-    /// Build a set from any iterable of capabilities. 
+    /// Build a set from any iterable of capabilities.
     pub fn from_caps<I: IntoIterator<Item = Capability>>(iter: I) -> Self {
         Self(iter.into_iter().collect())
     }

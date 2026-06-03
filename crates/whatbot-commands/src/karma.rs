@@ -1,8 +1,5 @@
 //! Karma: `subject++` / `subject--` and `karma <subject>`.
 
-pub mod adapter;
-pub mod store;
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -12,9 +9,7 @@ use regex::Regex;
 use whatbot_core::{
     match_data, Command, CommandMeta, CommandResult, Context, Event, MatchData, StateSlot,
 };
-
-pub use adapter::SqlKarmaStore;
-pub use store::{KarmaStore, KarmaStoreError};
+use whatbot_storage::Store;
 
 /// Matches `subject++` or `subject--`.
 static RE_KARMA: Lazy<Regex> = Lazy::new(|| {
@@ -30,11 +25,11 @@ enum Action {
 
 pub struct Karma {
     meta: CommandMeta,
-    store: Arc<dyn KarmaStore>,
+    store: Arc<Store>,
 }
 
 impl Karma {
-    pub fn new(store: Arc<dyn KarmaStore>) -> Self {
+    pub fn new(store: Arc<Store>) -> Self {
         Self {
             meta: CommandMeta::core("karma", "subject++ / subject-- ; karma <subject>"),
             store,
@@ -56,7 +51,6 @@ impl Command for Karma {
             return Some(MatchData::new(Action::Query(caps[1].trim().to_string())));
         }
 
-        // The increment/decrement regex matches the first occurrence
         if let Some(caps) = RE_KARMA.captures(text) {
             let subject = caps
                 .get(1)
@@ -75,18 +69,26 @@ impl Command for Karma {
         let action = match_data!(m => Action);
         match action {
             Action::Query(subject) => {
-                let score = self.store.score(&subject).await.ok().flatten().unwrap_or(0);
+                let score = self
+                    .store
+                    .karma()
+                    .score(&subject)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or(0);
                 ctx.say(format!("{subject} has karma of {score}."))
                     .with_stop(true)
             }
             Action::Apply { subject, delta } => {
-                // No self-karma.
                 if ctx.author.matches_handle(&subject) {
                     return ctx
                         .say(format!("{}: you can't karma yourself.", ctx.author.display))
                         .with_stop(true);
                 }
-                match self.store.apply(&subject, delta, Some(&ctx.author)).await {
+                // Synthetic accounts (id == 0) have no DB row to FK against.
+                let account_id = (ctx.author.id != 0).then_some(ctx.author.id);
+                match self.store.karma().record(&subject, delta, account_id).await {
                     Ok(new_score) => {
                         tracing::info!("subject {subject} set karma to {new_score}.");
                         CommandResult::handled_silently()
@@ -107,11 +109,10 @@ mod tests {
     use whatbot_core::testing::CommandTester;
     use whatbot_test_support::Pg;
 
-    async fn cmd() -> (Karma, Arc<dyn KarmaStore>) {
+    async fn cmd() -> (Karma, Arc<Store>) {
         let pg = Pg::shared().await;
-        let store: Arc<dyn KarmaStore> = Arc::new(SqlKarmaStore::new(pg.fresh_store().await));
-        let k = Karma::new(store.clone());
-        (k, store)
+        let store = pg.fresh_store().await;
+        (Karma::new(store.clone()), store)
     }
 
     #[tokio::test]
@@ -120,7 +121,7 @@ mod tests {
         let (k, store) = cmd().await;
         let r = t.say(&k, "rust++").await;
         assert!(r.is_empty(), "karma apply is silent in channel: {r:?}");
-        assert_eq!(store.score("rust").await.unwrap(), Some(1));
+        assert_eq!(store.karma().score("rust").await.unwrap(), Some(1));
     }
 
     #[tokio::test]
@@ -129,13 +130,13 @@ mod tests {
         let (k, store) = cmd().await;
         let r = t.say(&k, "javascript--").await;
         assert!(r.is_empty());
-        assert_eq!(store.score("javascript").await.unwrap(), Some(-1));
+        assert_eq!(store.karma().score("javascript").await.unwrap(), Some(-1));
     }
 
     #[tokio::test]
     async fn karma_query_reports_score() {
         let t = CommandTester::new();
-        let (k, _s) = cmd().await;
+        let (k, _store) = cmd().await;
         let _ = t.say(&k, "rust++").await;
         let _ = t.say(&k, "rust++").await;
         let r = t.say(&k, "karma rust").await;
@@ -145,7 +146,7 @@ mod tests {
     #[tokio::test]
     async fn karma_query_unknown_subject_is_zero() {
         let t = CommandTester::new();
-        let (k, _s) = cmd().await;
+        let (k, _store) = cmd().await;
         let r = t.say(&k, "karma nothing").await;
         assert_eq!(r, vec!["nothing has karma of 0.".to_string()]);
     }
@@ -156,7 +157,7 @@ mod tests {
         let (k, store) = cmd().await;
         let r = t.say(&k, "nichelle++").await;
         assert!(r[0].contains("can't karma yourself"));
-        assert_eq!(store.score("nichelle").await.unwrap(), None);
+        assert_eq!(store.karma().score("nichelle").await.unwrap(), None);
     }
 
     #[tokio::test]
@@ -165,13 +166,13 @@ mod tests {
         let (k, store) = cmd().await;
         let r = t.say(&k, "I love rust++ today").await;
         assert!(r.is_empty());
-        assert_eq!(store.score("rust").await.unwrap(), Some(1));
+        assert_eq!(store.karma().score("rust").await.unwrap(), Some(1));
     }
 
     #[tokio::test]
     async fn ignores_unrelated_plusplus() {
         let t = CommandTester::new();
-        let (k, _s) = cmd().await;
+        let (k, _store) = cmd().await;
         let r = t.say(&k, "this has no karma in it").await;
         assert!(r.is_empty());
     }
@@ -182,8 +183,7 @@ mod tests {
         let (k, store) = cmd().await;
         let r = t.say(&k, "(steve jobs)++").await;
         assert!(r.is_empty(), "karma is silent in channel: {r:?}");
-        assert_eq!(store.score("steve jobs").await.unwrap(), Some(1));
-
+        assert_eq!(store.karma().score("steve jobs").await.unwrap(), Some(1));
         let q = t.say(&k, "karma steve jobs").await;
         assert_eq!(q, vec!["steve jobs has karma of 1.".to_string()]);
     }
@@ -193,7 +193,7 @@ mod tests {
         let t = CommandTester::new();
         let (k, store) = cmd().await;
         let _ = t.say(&k, "(visual basic)--").await;
-        assert_eq!(store.score("visual basic").await.unwrap(), Some(-1));
+        assert_eq!(store.karma().score("visual basic").await.unwrap(), Some(-1));
     }
 
     #[tokio::test]
@@ -201,27 +201,24 @@ mod tests {
         let t = CommandTester::new();
         let (k, store) = cmd().await;
         let _ = t.say(&k, "I think (steve jobs)++ today").await;
-        assert_eq!(store.score("steve jobs").await.unwrap(), Some(1));
+        assert_eq!(store.karma().score("steve jobs").await.unwrap(), Some(1));
     }
 
     #[tokio::test]
     async fn parenthesized_trims_inner_whitespace() {
-        // `(  steve jobs  )++` should still karma "steve jobs", not the
-        // padded form.
         let t = CommandTester::new();
         let (k, store) = cmd().await;
         let _ = t.say(&k, "(  steve jobs  )++").await;
-        assert_eq!(store.score("steve jobs").await.unwrap(), Some(1));
-        assert_eq!(store.score("  steve jobs  ").await.unwrap(), None);
+        assert_eq!(store.karma().score("steve jobs").await.unwrap(), Some(1));
+        assert_eq!(store.karma().score("  steve jobs  ").await.unwrap(), None);
     }
 
     #[tokio::test]
     async fn parenthesized_supports_punctuation() {
-        // The bare form rejects `+` chars; the parens form passes them through.
         let t = CommandTester::new();
         let (k, store) = cmd().await;
         let _ = t.say(&k, "(C++)++").await;
-        assert_eq!(store.score("c++").await.unwrap(), Some(1));
+        assert_eq!(store.karma().score("c++").await.unwrap(), Some(1));
     }
 
     #[tokio::test]
@@ -230,6 +227,6 @@ mod tests {
         let (k, store) = cmd().await;
         let r = t.say(&k, "(steve jobs)++").await;
         assert!(r[0].contains("can't karma yourself"));
-        assert_eq!(store.score("steve jobs").await.unwrap(), None);
+        assert_eq!(store.karma().score("steve jobs").await.unwrap(), None);
     }
 }
