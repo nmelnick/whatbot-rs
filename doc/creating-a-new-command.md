@@ -301,11 +301,11 @@ A few `Context` helpers:
 - `ctx.addressed_to_bot`: True if the user named the bot or it's a DM
 - `ctx.author.matches_handle("x")`: Case-insensitive handle compare
 
-To be nice to the runtime, if your command shouldn't act on messages not directed act the bot, chain `require_direct` on
+To be nice to the runtime, if your command shouldn't act on messages not directed at the bot, chain `require_direct` on
 the `CommandMeta` rather than checking `addressed_to_bot` inside `handle`. The dispatcher checks `require_direct` before
 ever calling `matches`, so unrelated chat doesn't even enter a matching flow.
 
-## Getting (or, actually, reponding with) results
+## Getting (or, actually, responding with) results
 
 `CommandResult` carries three things:
 
