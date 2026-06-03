@@ -511,7 +511,10 @@ mod tests {
         let t = CommandTester::new();
         let (_f, l, _store) = factoid_and_listener().await;
         let r = t.say(&l, "nothing").await;
-        assert!(r.is_empty(), "listener should be silent on unknown, got {r:?}");
+        assert!(
+            r.is_empty(),
+            "listener should be silent on unknown, got {r:?}"
+        );
     }
 
     #[tokio::test]

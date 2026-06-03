@@ -37,12 +37,10 @@ impl<'a> SeenRepo<'a> {
 
     pub async fn lookup(&self, handle: &str) -> Result<Option<SeenRow>, StorageError> {
         let norm = handle.to_lowercase();
-        let row = sqlx::query(
-            "SELECT handle, message, seen_at FROM seen WHERE handle_norm = $1",
-        )
-        .bind(&norm)
-        .fetch_optional(self.pool)
-        .await?;
+        let row = sqlx::query("SELECT handle, message, seen_at FROM seen WHERE handle_norm = $1")
+            .bind(&norm)
+            .fetch_optional(self.pool)
+            .await?;
         Ok(row.map(|r| SeenRow {
             handle: r.get("handle"),
             message: r.get("message"),

@@ -345,7 +345,10 @@ async fn consumed_silently_skips_lower_tiers() {
         .await;
 
     let replies = bot.say("nichelle", "rust++").await;
-    assert!(replies.is_empty(), "Last must not fire when Core consumed silently");
+    assert!(
+        replies.is_empty(),
+        "Last must not fire when Core consumed silently"
+    );
 }
 
 #[tokio::test]

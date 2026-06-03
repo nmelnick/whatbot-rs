@@ -11,11 +11,11 @@ use chrono::Utc;
 use crate::capability::Capability;
 use crate::command::Command;
 use crate::context::{ChannelId, Context, ServiceId, Visibility};
-use crate::monitor::Monitor;
 use crate::event::Event;
 use crate::identity::Account;
 use crate::mentions::{default_mention_renderer, MentionRenderer};
 use crate::message::Message;
+use crate::monitor::Monitor;
 use crate::reply::Reply;
 use crate::state::StateMap;
 

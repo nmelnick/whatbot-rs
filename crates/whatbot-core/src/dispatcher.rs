@@ -7,12 +7,12 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 
 use crate::command::{Command, Priority};
-use crate::monitor::{Monitor, MonitorCommand};
 use crate::context::{ChannelId, Context, ServiceId, Visibility};
 use crate::event::{Event, RawEvent};
 use crate::identity::Account;
 use crate::mentions::{default_mention_renderer, MentionRenderer};
 use crate::message::Message;
+use crate::monitor::{Monitor, MonitorCommand};
 use crate::reply::{Destination, Reply};
 use crate::state::StateMap;
 use crate::transcript::{Direction, TranscriptEntry, TranscriptHandle};

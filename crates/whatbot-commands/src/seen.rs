@@ -11,8 +11,7 @@ use whatbot_core::{
 };
 use whatbot_storage::Store;
 
-static RE_SEEN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^seen\s+(.+?)\s*$").unwrap());
+static RE_SEEN: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^seen\s+(.+?)\s*$").unwrap());
 
 pub struct SeenRecorder {
     store: Arc<Store>,
@@ -150,7 +149,11 @@ mod tests {
     #[tokio::test]
     async fn seen_reports_known_user() {
         let (seen, _, store) = setup().await;
-        store.seen().record("nichelle", "hey everyone").await.unwrap();
+        store
+            .seen()
+            .record("nichelle", "hey everyone")
+            .await
+            .unwrap();
         let t = CommandTester::new();
         let replies = t.say(&seen, "seen nichelle").await;
         assert_eq!(replies.len(), 1);
