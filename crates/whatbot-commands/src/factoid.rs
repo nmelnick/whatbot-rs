@@ -1,8 +1,5 @@
 //! Factoid: the "x is y" memory
 
-pub mod adapter;
-pub mod store;
-
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -13,9 +10,7 @@ use regex::Regex;
 use whatbot_core::{
     match_data, Command, CommandMeta, CommandResult, Context, Event, MatchData, StateSlot,
 };
-
-pub use adapter::SqlFactoidStore;
-pub use store::{FactoidStore, FactoidStoreError};
+use whatbot_storage::Store;
 
 static RE_WHAT_IS: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^(?:wtf|what|who)\s+(?:is|are)\s+(.+?)\s*\??$").unwrap());
@@ -44,11 +39,11 @@ enum Action {
 
 pub struct Factoid {
     meta: CommandMeta,
-    store: Arc<dyn FactoidStore>,
+    store: Arc<Store>,
 }
 
 impl Factoid {
-    pub fn new(store: Arc<dyn FactoidStore>) -> Self {
+    pub fn new(store: Arc<Store>) -> Self {
         Self {
             meta: CommandMeta::core(
                 "factoid",
@@ -83,7 +78,6 @@ impl Command for Factoid {
         }
         if let Some(caps) = RE_ASSIGN.captures(text) {
             let mut subject = caps[1].trim().to_string();
-            // Don't treat questions as assignments.
             if matches!(
                 subject.to_lowercase().as_str(),
                 "wtf" | "what" | "who" | "when" | "where" | "why"
@@ -135,21 +129,21 @@ impl Factoid {
         ctx: &Context,
         _state: &mut StateSlot,
     ) -> CommandResult {
-        let id = match self.store.ensure(subject, is_plural).await {
+        let id = match self.store.factoids().upsert(subject, is_plural).await {
             Ok(id) => id,
             Err(e) => return error_reply(ctx, "failed to record that", &e),
         };
-        // Split on " or " to allow multi-fact assignment, mirroring old whatbot.
+        // Synthetic accounts (id == 0) have no DB row to FK against.
+        let account_id = (ctx.author.id != 0).then_some(ctx.author.id);
         for fact in description.split(" or ") {
             let fact = fact.trim();
             if fact.is_empty() {
                 continue;
             }
-            if let Err(e) = self.store.add_fact(id, fact, Some(&ctx.author)).await {
+            if let Err(e) = self.store.factoids().add_fact(id, fact, account_id).await {
                 return error_reply(ctx, "failed to record that", &e);
             }
         }
-        // Respond when the user addressed us explicitly, otherwise, silently gather info
         if ctx.addressed_to_bot {
             ctx.say(format!("OK, {}.", ctx.author.display))
         } else {
@@ -158,13 +152,11 @@ impl Factoid {
     }
 
     async fn retrieve(&self, subject: &str, ctx: &Context, state: &mut StateSlot) -> CommandResult {
-        // Direct retrieval: unknown subjects produce a "no idea" reply, and
-        // silent-flagged factoids speak anyway because the user asked.
-        retrieve_shared(&*self.store, subject, ctx, state, true).await
+        retrieve_shared(&self.store, subject, ctx, state, true).await
     }
 
     async fn forget(&self, subject: &str, ctx: &Context) -> CommandResult {
-        match self.store.forget(subject).await {
+        match self.store.factoids().forget(subject).await {
             Ok(true) => ctx
                 .say(format!("I forgot \"{subject}\", {}.", ctx.author.display))
                 .with_stop(true),
@@ -202,13 +194,13 @@ impl Factoid {
 }
 
 async fn retrieve_shared(
-    store: &dyn FactoidStore,
+    store: &Store,
     subject: &str,
     ctx: &Context,
     state: &mut StateSlot,
     direct: bool,
 ) -> CommandResult {
-    let Ok(Some(factoid)) = store.find(subject).await else {
+    let Ok(Some(factoid)) = store.factoids().find(subject).await else {
         return if direct {
             ctx.say(format!("I have no idea what '{subject}' could be."))
                 .with_stop(true)
@@ -221,7 +213,7 @@ async fn retrieve_shared(
         return CommandResult::empty();
     }
 
-    let facts = match store.facts(factoid.id).await {
+    let facts = match store.factoids().facts(factoid.id).await {
         Ok(v) if !v.is_empty() => v,
         _ => {
             return if direct {
@@ -262,11 +254,11 @@ async fn retrieve_shared(
 /// only fires when no other command produced output.
 pub struct FactoidListener {
     meta: CommandMeta,
-    store: Arc<dyn FactoidStore>,
+    store: Arc<Store>,
 }
 
 impl FactoidListener {
-    pub fn new(store: Arc<dyn FactoidStore>) -> Self {
+    pub fn new(store: Arc<Store>) -> Self {
         Self {
             meta: CommandMeta::last_resort("factoid_listener", ""),
             store,
@@ -293,7 +285,7 @@ impl Command for FactoidListener {
 
     async fn handle(&self, m: MatchData, ctx: &Context, state: &mut StateSlot) -> CommandResult {
         let subject = match_data!(m => ListenerMatch);
-        retrieve_shared(&*self.store, &subject.0, ctx, state, false).await
+        retrieve_shared(&self.store, &subject.0, ctx, state, false).await
     }
 }
 
@@ -308,30 +300,19 @@ mod tests {
     use whatbot_core::testing::CommandTester;
     use whatbot_test_support::Pg;
 
-    async fn cmd() -> (Factoid, Arc<dyn FactoidStore>) {
+    async fn cmd() -> (Factoid, Arc<Store>) {
         let pg = Pg::shared().await;
-        let store: Arc<dyn FactoidStore> = Arc::new(SqlFactoidStore::new(pg.fresh_store().await));
-        let f = Factoid::new(store.clone());
-        (f, store)
+        let store = pg.fresh_store().await;
+        (Factoid::new(store.clone()), store)
     }
 
-    async fn cmd_with_db() -> (
-        Factoid,
-        Arc<dyn FactoidStore>,
-        Arc<whatbot_storage::Store>,
-    ) {
+    async fn cmd_with_db() -> (Factoid, Arc<Store>) {
         let pg = Pg::shared().await;
-        let db = pg.fresh_store().await;
-        let store: Arc<dyn FactoidStore> = Arc::new(SqlFactoidStore::new(db.clone()));
-        let f = Factoid::new(store.clone());
-        (f, store, db)
+        let store = pg.fresh_store().await;
+        (Factoid::new(store.clone()), store)
     }
 
-    async fn account(
-        db: &whatbot_storage::Store,
-        service: &str,
-        handle: &str,
-    ) -> whatbot_core::Account {
+    async fn account(db: &Store, service: &str, handle: &str) -> whatbot_core::Account {
         db.accounts()
             .upsert(&whatbot_core::ServiceId::new(service), handle, handle)
             .await
@@ -396,7 +377,7 @@ mod tests {
 
     #[tokio::test]
     async fn who_said_returns_attribution_per_channel() {
-        let (factoid, _store, db) = cmd_with_db().await;
+        let (factoid, db) = cmd_with_db().await;
         let nichelle = account(&db, "test", "nichelle").await;
         let leonard = account(&db, "test", "leonard").await;
         let t_a = CommandTester::new()
@@ -404,25 +385,20 @@ mod tests {
             .with_author_account(nichelle);
         let t_b = t_a.fork_with_channel("b").with_author_account(leonard);
 
-        // Assignments in each channel — different attributions go through
-        // the shared store.
         let _ = t_a.say(&factoid, "sky is blue").await;
         let _ = t_b.say(&factoid, "grass is green").await;
-
-        // Trigger who_said tracking via retrieval in each channel.
         let _ = t_a.say(&factoid, "what is sky").await;
         let _ = t_b.say(&factoid, "what is grass").await;
 
         let q_a = t_a.say(&factoid, "who said that").await;
         let q_b = t_b.say(&factoid, "who said that").await;
-
         assert!(q_a[0].contains("nichelle"), "channel a: {q_a:?}");
         assert!(q_b[0].contains("leonard"), "channel b: {q_b:?}");
     }
 
     #[tokio::test]
     async fn who_said_persists_across_calls_in_same_channel() {
-        let (factoid, _store, db) = cmd_with_db().await;
+        let (factoid, db) = cmd_with_db().await;
         let nichelle = account(&db, "test", "nichelle").await;
         let t = CommandTester::new().with_author_account(nichelle);
         let _ = t.say(&factoid, "sky is blue").await;
@@ -433,8 +409,7 @@ mod tests {
 
     #[tokio::test]
     async fn who_said_isolated_across_services() {
-        // Same channel name on different services must not share state.
-        let (factoid, _store, db) = cmd_with_db().await;
+        let (factoid, db) = cmd_with_db().await;
         let nichelle = account(&db, "svc-one", "nichelle").await;
         let leonard = account(&db, "svc-two", "leonard").await;
         let t_one = CommandTester::new()
@@ -458,7 +433,7 @@ mod tests {
 
     #[tokio::test]
     async fn who_said_recognizes_self() {
-        let (factoid, _store, db) = cmd_with_db().await;
+        let (factoid, db) = cmd_with_db().await;
         let nichelle = account(&db, "test", "nichelle").await;
         let t = CommandTester::new().with_author_account(nichelle);
         let _ = t.say(&factoid, "sky is blue").await;
@@ -472,8 +447,8 @@ mod tests {
         let t = CommandTester::new();
         let (factoid, store) = cmd().await;
         let _ = t.say(&factoid, "mood is happy or sad or neutral").await;
-        let f = store.find("mood").await.unwrap().unwrap();
-        let facts = store.facts(f.id).await.unwrap();
+        let f = store.factoids().find("mood").await.unwrap().unwrap();
+        let facts = store.factoids().facts(f.id).await.unwrap();
         let descs: Vec<String> = facts.into_iter().map(|f| f.description).collect();
         assert_eq!(
             descs,
@@ -487,36 +462,21 @@ mod tests {
 
     #[tokio::test]
     async fn assigning_you_when_addressed_rewrites_to_bot_name() {
-        // Old whatbot: "whatbot: you are great" stores the factoid under
-        // the bot's display name, not the literal "you".
         let t = CommandTester::new()
             .with_author("nichelle")
             .with_bot("whatbot");
         let (factoid, store) = cmd().await;
         let _ = t.say(&factoid, "you are great").await;
-
-        assert!(
-            store.find("whatbot").await.unwrap().is_some(),
-            "should have stored under the bot's name"
-        );
-        assert!(
-            store.find("you").await.unwrap().is_none(),
-            "should not have stored under literal 'you'"
-        );
+        assert!(store.factoids().find("whatbot").await.unwrap().is_some());
+        assert!(store.factoids().find("you").await.unwrap().is_none());
     }
 
     #[tokio::test]
     async fn assigning_you_when_not_addressed_uses_literal_you() {
-        // Without addressing, "you are great" is just ambient chatter —
-        // store it under "you" as the user said it. Mirrors old whatbot.
         let t = CommandTester::new().addressed(false);
         let (factoid, store) = cmd().await;
         let _ = t.say(&factoid, "you are great").await;
-
-        assert!(
-            store.find("you").await.unwrap().is_some(),
-            "should store under literal 'you' when not addressed"
-        );
+        assert!(store.factoids().find("you").await.unwrap().is_some());
     }
 
     #[tokio::test]
@@ -524,22 +484,23 @@ mod tests {
         let t = CommandTester::new();
         let (factoid, store) = cmd().await;
         let _ = t.say(&factoid, "what is rust").await;
-        // Should not have created a "what" factoid.
-        assert!(store.find("what").await.unwrap().is_none());
+        assert!(store.factoids().find("what").await.unwrap().is_none());
     }
 
-    async fn factoid_and_listener() -> (Factoid, FactoidListener, Arc<dyn FactoidStore>) {
+    async fn factoid_and_listener() -> (Factoid, FactoidListener, Arc<Store>) {
         let pg = Pg::shared().await;
-        let store: Arc<dyn FactoidStore> = Arc::new(SqlFactoidStore::new(pg.fresh_store().await));
-        let f = Factoid::new(store.clone());
-        let l = FactoidListener::new(store.clone());
-        (f, l, store)
+        let store = pg.fresh_store().await;
+        (
+            Factoid::new(store.clone()),
+            FactoidListener::new(store.clone()),
+            store,
+        )
     }
 
     #[tokio::test]
     async fn listener_responds_to_bare_known_subject() {
         let t = CommandTester::new();
-        let (f, l, _s) = factoid_and_listener().await;
+        let (f, l, _store) = factoid_and_listener().await;
         let _ = t.say(&f, "rust is a systems language").await;
         let r = t.say(&l, "rust").await;
         assert_eq!(r, vec!["rust is a systems language".to_string()]);
@@ -548,18 +509,15 @@ mod tests {
     #[tokio::test]
     async fn listener_silent_for_unknown_subject() {
         let t = CommandTester::new();
-        let (_f, l, _s) = factoid_and_listener().await;
+        let (_f, l, _store) = factoid_and_listener().await;
         let r = t.say(&l, "nothing").await;
-        assert!(
-            r.is_empty(),
-            "listener should be silent on unknown, got {r:?}"
-        );
+        assert!(r.is_empty(), "listener should be silent on unknown, got {r:?}");
     }
 
     #[tokio::test]
     async fn listener_honors_reply_directive_in_bare_lookup() {
         let t = CommandTester::new();
-        let (f, l, _s) = factoid_and_listener().await;
+        let (f, l, _store) = factoid_and_listener().await;
         let _ = t.say(&f, "ping is <reply> pong").await;
         let r = t.say(&l, "ping").await;
         assert_eq!(r, vec!["pong".to_string()]);

@@ -6,9 +6,6 @@ mod logging;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use whatbot_commands::factoid::{FactoidStore, SqlFactoidStore};
-use whatbot_commands::karma::{KarmaStore, SqlKarmaStore};
-use whatbot_commands::seen::{SeenStore, SqlSeenStore};
 use whatbot_commands::{Echo, Factoid, FactoidListener, Help, Karma, Seen, SeenRecorder};
 use whatbot_core::dispatcher::IdentityResolver;
 use whatbot_core::{Dispatcher, Io, Registry, TranscriptHandle};
@@ -38,9 +35,9 @@ async fn main() -> anyhow::Result<()> {
     let store = Arc::new(Store::connect(&db.url).await?);
     store.migrate().await?;
     tracing::info!("connected to postgres and migrated");
-    let factoid_store: Arc<dyn FactoidStore> = Arc::new(SqlFactoidStore::new(store.clone()));
-    let karma_store: Arc<dyn KarmaStore> = Arc::new(SqlKarmaStore::new(store.clone()));
-    let seen_store: Arc<dyn SeenStore> = Arc::new(SqlSeenStore::new(store.clone()));
+    let seen_store = store.clone();
+    let factoid_store = store.clone();
+    let karma_store = store.clone();
     let identity: Arc<dyn IdentityResolver> = store;
 
     let mut registry = Registry::new();
