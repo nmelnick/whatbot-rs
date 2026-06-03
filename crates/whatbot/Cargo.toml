@@ -13,6 +13,7 @@ whatbot-core = { workspace = true }
 whatbot-storage = { workspace = true }
 whatbot-commands = { workspace = true }
 whatbot-io-console = { workspace = true }
+whatbot-io-discord = { workspace = true }
 
 anyhow = "1"
 chrono = { workspace = true }

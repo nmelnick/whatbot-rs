@@ -50,6 +50,7 @@ pub struct DatabaseConfig {
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum IoConfig {
     Console(ConsoleIoConfig),
+    Discord(DiscordIoConfig),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -62,6 +63,16 @@ pub struct ConsoleIoConfig {
 
 fn default_console_user() -> String {
     "user".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscordIoConfig {
+    /// Optional service id override
+    #[serde(default)]
+    pub id: Option<String>,
+    pub token: String,
+    #[serde(default)]
+    pub addressed_prefix: Option<String>,
 }
 
 impl Config {

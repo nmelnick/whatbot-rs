@@ -21,7 +21,7 @@ jobs:
       run: cargo test --verbose
 
   docker:
-    if: github.repository == 'nmelnick/whatbot-rs' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    if: github.repository == 'nmelnick/whatbot-rs' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     needs: build
     runs-on: ubuntu-latest
     steps:

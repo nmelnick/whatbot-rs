@@ -4,6 +4,7 @@ members = [
     "crates/whatbot-core",
     "crates/whatbot-storage",
     "crates/whatbot-io-console",
+    "crates/whatbot-io-discord",
     "crates/whatbot-commands",
     "crates/whatbot-test-support",
     "crates/whatbot",
@@ -43,4 +44,5 @@ whatbot-core     = { path = "crates/whatbot-core" }
 whatbot-storage  = { path = "crates/whatbot-storage" }
 whatbot-commands = { path = "crates/whatbot-commands" }
 whatbot-io-console = { path = "crates/whatbot-io-console" }
+whatbot-io-discord = { path = "crates/whatbot-io-discord" }
 whatbot-test-support = { path = "crates/whatbot-test-support" }

@@ -12,6 +12,7 @@ use whatbot_commands::{Echo, Factoid, FactoidListener, Help, Karma};
 use whatbot_core::dispatcher::IdentityResolver;
 use whatbot_core::{Dispatcher, Io, Registry, TranscriptHandle};
 use whatbot_io_console::ConsoleIo;
+use whatbot_io_discord::{DiscordConfig, DiscordIo};
 use whatbot_storage::Store;
 
 use crate::config::{CommandConfig, Config, IoConfig};
@@ -130,6 +131,16 @@ fn build_io(cfg: &IoConfig) -> anyhow::Result<Box<dyn Io>> {
                 io = io.with_service(id);
             }
             Box::new(io)
+        }
+        IoConfig::Discord(d) => {
+            let mut dc = DiscordConfig::new(d.token.clone());
+            if let Some(id) = &d.id {
+                dc.service_id = whatbot_core::ServiceId::new(id);
+            }
+            if let Some(p) = &d.addressed_prefix {
+                dc = dc.with_addressed_prefix(p.clone());
+            }
+            Box::new(DiscordIo::new(dc))
         }
     })
 }
