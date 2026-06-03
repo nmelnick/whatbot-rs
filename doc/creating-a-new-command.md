@@ -115,7 +115,7 @@ impl Command for Ping {
 ## Observing messages with the `Monitor` trait
 
 If your command needs to observe every message without replying, like recording activity, tracking statistics, stalking,
-implement [`Monitor`](../crates/whatbot-core/src/monitor.rs) instead of`Command`. It removes all the `matches`/`handle`/
+implement [`Monitor`](../crates/whatbot-core/src/monitor.rs) instead of `Command`. It removes all the `matches`/`handle`/
 `MatchData` boilerplate:
 
 ```rust
