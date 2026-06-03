@@ -106,7 +106,7 @@ impl Command for Ping {
 - `matches` returns `Option<MatchData>`. The contents of `MatchData` are opaque to the dispatcher, it's just routing the
   contents back, so pick whatever type makes sense. In this case, we use an empty marker because there's nothing to pass
   through.
-- `match_data!(m => PingMatch)` unwraps the boxed `Any` back into your type. On a type mismatch (which should't happen
+- `match_data!(m => PingMatch)` unwraps the boxed `Any` back into your type. On a type mismatch (which shouldn't happen
   unless `matches` and `handle` somehow differ), it will return `CommandResult::empty()`.
 - `ctx.say("pong")` is shorthand for `CommandResult::reply(ctx.reply_here("pong"))`, which accounts for most of the
   replyish methods a command will make. The reply is addressed to the same channel the incoming message arrived through.
