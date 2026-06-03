@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 
 use crate::command::{Command, Priority};
+use crate::monitor::{Monitor, MonitorCommand};
 use crate::context::{ChannelId, Context, ServiceId, Visibility};
 use crate::event::{Event, RawEvent};
 use crate::identity::Account;
@@ -30,6 +31,10 @@ impl Registry {
     pub fn install(&mut self, cmd: Arc<dyn Command>) {
         let p = cmd.meta().priority;
         self.by_priority.entry(p).or_default().push(cmd);
+    }
+
+    pub fn install_monitor<M: Monitor + 'static>(&mut self, monitor: M) {
+        self.install(Arc::new(MonitorCommand::new(monitor)));
     }
 
     pub fn commands_at(&self, priority: Priority) -> &[Arc<dyn Command>] {

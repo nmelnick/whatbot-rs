@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use whatbot_core::{
-    match_data, Command, CommandMeta, CommandResult, Context, Event, MatchData, StateSlot,
+    match_data, Command, CommandMeta, CommandResult, Context, Event, MatchData, Monitor, StateSlot,
 };
 use whatbot_storage::Store;
 
@@ -15,50 +15,28 @@ static RE_SEEN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^seen\s+(.+?)\s*$").unwrap());
 
 pub struct SeenRecorder {
-    meta: CommandMeta,
     store: Arc<Store>,
 }
 
 impl SeenRecorder {
     pub fn new(store: Arc<Store>) -> Self {
-        Self {
-            meta: CommandMeta::primary("seen_recorder", ""),
-            store,
-        }
+        Self { store }
     }
-}
-
-struct RecordMatch {
-    display: String,
-    text: String,
 }
 
 #[async_trait]
-impl Command for SeenRecorder {
-    fn meta(&self) -> &CommandMeta {
-        &self.meta
+impl Monitor for SeenRecorder {
+    fn name(&self) -> &'static str {
+        "seen_recorder"
     }
 
-    fn matches(&self, evt: &Event, ctx: &Context) -> Option<MatchData> {
-        let Event::Message(m) = evt else {
-            return None;
-        };
-        let text = m.text.trim();
-        if text.is_empty() || RE_SEEN.is_match(text) {
-            return None;
+    async fn observe(&self, ctx: &Context, text: &str) {
+        if RE_SEEN.is_match(text) {
+            return;
         }
-        Some(MatchData::new(RecordMatch {
-            display: ctx.author.display.clone(),
-            text: text.to_string(),
-        }))
-    }
-
-    async fn handle(&self, m: MatchData, _ctx: &Context, _state: &mut StateSlot) -> CommandResult {
-        let rm = match_data!(m => RecordMatch);
-        if let Err(e) = self.store.seen().record(&rm.display, &rm.text).await {
+        if let Err(e) = self.store.seen().record(&ctx.author.display, text).await {
             tracing::warn!(error = %e, "seen record failed");
         }
-        CommandResult::empty()
     }
 }
 
@@ -144,8 +122,7 @@ mod tests {
     async fn recorder_stores_message() {
         let (_, recorder, store) = setup().await;
         let t = CommandTester::new().with_author("nichelle");
-        let replies = t.say(&recorder, "hello there").await;
-        assert!(replies.is_empty(), "recorder must be silent");
+        t.observe(&recorder, "hello there").await;
         let row = store.seen().lookup("nichelle").await.unwrap();
         assert!(row.is_some(), "should have recorded nichelle");
         assert_eq!(row.unwrap().message, "hello there");
@@ -155,7 +132,7 @@ mod tests {
     async fn recorder_skips_seen_queries() {
         let (_, recorder, store) = setup().await;
         let t = CommandTester::new().with_author("nichelle");
-        let _ = t.say(&recorder, "seen bob").await;
+        t.observe(&recorder, "seen bob").await;
         assert!(
             store.seen().lookup("nichelle").await.unwrap().is_none(),
             "seen queries must not be recorded"
@@ -166,7 +143,7 @@ mod tests {
     async fn recorder_ignores_empty_text() {
         let (_, recorder, store) = setup().await;
         let t = CommandTester::new().with_author("nichelle");
-        let _ = t.say(&recorder, "   ").await;
+        t.observe(&recorder, "   ").await;
         assert!(store.seen().lookup("nichelle").await.unwrap().is_none());
     }
 

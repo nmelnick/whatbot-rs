@@ -11,6 +11,7 @@ use chrono::Utc;
 use crate::capability::Capability;
 use crate::command::Command;
 use crate::context::{ChannelId, Context, ServiceId, Visibility};
+use crate::monitor::Monitor;
 use crate::event::Event;
 use crate::identity::Account;
 use crate::mentions::{default_mention_renderer, MentionRenderer};
@@ -199,6 +200,19 @@ impl CommandTester {
     /// when the command did not match, was denied, or produced no replies.
     pub async fn say(&self, cmd: &dyn Command, text: &str) -> Vec<String> {
         self.send(cmd, text).await.texts()
+    }
+
+    /// Drive a [`Monitor`] with the given text, using the tester's configured
+    /// author and channel. Mirrors the `MonitorCommand` wrapper: trims the
+    /// text and skips if empty. Monitors produce no replies, so this just
+    /// triggers the side-effect (e.g. writing to the database).
+    pub async fn observe(&self, monitor: &dyn Monitor, text: &str) {
+        let text = text.trim();
+        if text.is_empty() {
+            return;
+        }
+        let ctx = self.context();
+        monitor.observe(&ctx, text).await;
     }
 
     /// Access the shared state map. Useful for tests that need to inspect

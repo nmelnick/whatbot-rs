@@ -41,9 +41,8 @@ async fn main() -> anyhow::Result<()> {
     let identity: Arc<dyn IdentityResolver> = store;
 
     let mut registry = Registry::new();
-    install_command(&mut registry, "seen_recorder", &cfg.commands, |_| {
-        Ok(SeenRecorder::new(seen_store.clone()))
-    })?;
+    registry.install_monitor(SeenRecorder::new(seen_store.clone()));
+    tracing::info!(command = "seen_recorder", "installed");
     install_command(&mut registry, "echo", &cfg.commands, |_| Ok(Echo::new()))?;
     install_command(&mut registry, "factoid", &cfg.commands, |_| {
         Ok(Factoid::new(factoid_store.clone()))
