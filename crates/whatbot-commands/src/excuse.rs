@@ -519,3 +519,16 @@ impl Command for Excuse {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use whatbot_core::testing::CommandTester;
+
+    #[tokio::test]
+    async fn sends_excuse_to_channel() {
+        let t = CommandTester::new();
+        let replies = t.say(&Excuse::new(), "excuse").await;
+        assert_eq!(replies.len(), 1);
+    }
+}
