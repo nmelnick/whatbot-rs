@@ -38,6 +38,8 @@ WORKDIR /app
 
 COPY --from=builder /build/target/release/whatbot /app/whatbot
 
+RUN mkdir /app/conf
+
 USER whatbot
 
 # Mount your config file at /app/conf/whatbot.toml, or set WHATBOT_CONFIG
