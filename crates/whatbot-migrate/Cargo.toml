@@ -1,0 +1,20 @@
+[package]
+name = "whatbot-migrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "whatbot-migrate"
+path = "src/main.rs"
+
+[dependencies]
+whatbot-storage = { workspace = true }
+anyhow = "1"
+chrono = { workspace = true }
+clap = { workspace = true }
+rusqlite = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
