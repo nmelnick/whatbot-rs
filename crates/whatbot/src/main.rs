@@ -6,7 +6,7 @@ mod logging;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use whatbot_commands::{Echo, Excuse, Factoid, FactoidListener, Help, Karma, Seen, SeenRecorder};
+use whatbot_commands::{Awareness, Echo, Excuse, Factoid, FactoidListener, Help, Karma, Seen, SeenRecorder};
 use whatbot_core::dispatcher::IdentityResolver;
 use whatbot_core::{Dispatcher, Io, Registry, TranscriptHandle};
 use whatbot_io_console::ConsoleIo;
@@ -43,6 +43,7 @@ async fn main() -> anyhow::Result<()> {
     let mut registry = Registry::new();
     registry.install_monitor(SeenRecorder::new(seen_store.clone()));
     tracing::info!(command = "seen_recorder", "installed");
+    install_command(&mut registry, "awareness", &cfg.commands, |_| Ok(Awareness::new()))?;
     install_command(&mut registry, "echo", &cfg.commands, |_| Ok(Echo::new()))?;
     install_command(&mut registry, "excuse", &cfg.commands, |_| Ok(Excuse::new()))?;
     install_command(&mut registry, "factoid", &cfg.commands, |_| {

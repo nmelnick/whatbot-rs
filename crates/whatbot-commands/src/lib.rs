@@ -1,3 +1,4 @@
+pub mod awareness;
 pub mod echo;
 pub mod excuse;
 pub mod factoid;
@@ -5,6 +6,7 @@ pub mod help;
 pub mod karma;
 pub mod seen;
 
+pub use awareness::Awareness;
 pub use echo::Echo;
 pub use excuse::Excuse;
 pub use factoid::{Factoid, FactoidListener, FactoidScratch};
