@@ -100,8 +100,6 @@ fn int_to_bool(v: Option<i64>) -> bool {
     v.unwrap_or(0) != 0
 }
 
-/// Decode text tolerant of invalid utf8.
-///
 /// SQLite stores raw bytes in text columns and never validates encoding. The
 /// old perl whatbot had varying amounts of utf8 support over the span of many
 /// years, so it just shoved bytes into SQLite. Now that we're using Postgres,
