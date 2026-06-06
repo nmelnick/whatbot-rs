@@ -2,9 +2,11 @@
 
 This is an experimental rethink of [whatbot](https://github.com/nmelnick/whatbot) but written in Rust.
 
-[what](./doc/what.md)?
+## Documentation
 
-[Creating a new command](./doc/creating-a-new-command.md)
+* [what](./doc/what.md)?
+* [Creating a new command](./doc/creating-a-new-command.md)
+* [Migrating from old whatbot](./doc/migrating-from-perl-whatbot.md)
 
 This is still in progress. Rust skills are still rusty.
 

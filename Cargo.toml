@@ -7,9 +7,10 @@ members = [
     "crates/whatbot-io-discord",
     "crates/whatbot-commands",
     "crates/whatbot-test-support",
+    "crates/whatbot-migrate",
     "crates/whatbot",
 ]
-default-run = "whatbot"
+default-members = ["crates/whatbot"]
 
 [workspace.package]
 version = "0.1.0"
@@ -36,6 +37,7 @@ regex = "1"
 once_cell = "1"
 rand = { version = "0.8", features = ["small_rng"] }
 clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "chrono", "macros", "migrate"] }
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
