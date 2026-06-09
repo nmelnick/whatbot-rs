@@ -134,7 +134,7 @@ impl<'a> KarmaRepo<'a> {
     ) -> Result<Vec<KarmaSubjectScore>, StorageError> {
         let rows = sqlx::query(
             "SELECT MIN(subject) AS subject, \
-                    (SUM(ABS(delta)) - SUM(delta))::bigint AS score \
+                    (SUM(ABS(delta)) - ABS(SUM(delta)))::bigint AS score \
              FROM karma GROUP BY subject_norm \
              ORDER BY score DESC LIMIT $1",
         )
