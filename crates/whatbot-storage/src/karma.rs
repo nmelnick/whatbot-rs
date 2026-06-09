@@ -109,15 +109,20 @@ impl<'a> KarmaRepo<'a> {
         ascending: bool,
         limit: i64,
     ) -> Result<Vec<KarmaSubjectScore>, StorageError> {
-        let order = if ascending { "ASC" } else { "DESC" };
-        let sql = format!(
+        let sql = if ascending {
             "SELECT MIN(subject) AS subject, SUM(delta)::bigint AS total \
              FROM karma \
              GROUP BY subject_norm \
-             ORDER BY total {order} \
+             ORDER BY total ASC \
              LIMIT $1"
-        );
-        let rows = sqlx::query(&sql).bind(limit).fetch_all(self.pool).await?;
+        } else {
+            "SELECT MIN(subject) AS subject, SUM(delta)::bigint AS total \
+             FROM karma \
+             GROUP BY subject_norm \
+             ORDER BY total DESC \
+             LIMIT $1"
+        };
+        let rows = sqlx::query(sql).bind(limit).fetch_all(self.pool).await?;
         Ok(rows
             .into_iter()
             .map(|r| KarmaSubjectScore {
