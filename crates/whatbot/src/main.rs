@@ -6,7 +6,10 @@ mod logging;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use whatbot_commands::{Awareness, Echo, Excuse, Factoid, FactoidListener, Help, Karma, Seen, SeenRecorder};
+use whatbot_commands::{
+    Awareness, Echo, Excuse, Factoid, FactoidListener, Help, Karma, KarmaHistory, Seen,
+    SeenRecorder,
+};
 use whatbot_core::dispatcher::IdentityResolver;
 use whatbot_core::{Dispatcher, Io, Registry, TranscriptHandle};
 use whatbot_io_console::ConsoleIo;
@@ -38,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
     let seen_store = store.clone();
     let factoid_store = store.clone();
     let karma_store = store.clone();
+    let karma_history_store = store.clone();
     let identity: Arc<dyn IdentityResolver> = store;
 
     let mut registry = Registry::new();
@@ -51,6 +55,9 @@ async fn main() -> anyhow::Result<()> {
     })?;
     install_command(&mut registry, "karma", &cfg.commands, |_| {
         Ok(Karma::new(karma_store.clone()))
+    })?;
+    install_command(&mut registry, "karma_history", &cfg.commands, |_| {
+        Ok(KarmaHistory::new(karma_history_store.clone()))
     })?;
     // Catch all factoid retrieval lives at Priority::Last; it only fires when
     // no other command produced output.
