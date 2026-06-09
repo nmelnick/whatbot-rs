@@ -249,4 +249,24 @@ mod tests {
         let r = t.say(&kh, "hello there").await;
         assert!(r.is_empty());
     }
+
+    #[tokio::test]
+    async fn controversy_prefers_mixed_votes() {
+        let t = CommandTester::new();
+        let (kh, store) = cmd().await;
+
+        // Mixed votes => higher controversy score
+        store.karma().record("rust", 1, None).await.unwrap();
+        store.karma().record("rust", -1, None).await.unwrap();
+
+        // One-sided votes => low/zero controversy score
+        store.karma().record("php", -1, None).await.unwrap();
+        store.karma().record("php", -1, None).await.unwrap();
+
+        let r = t.say(&kh, "fighting words?").await;
+        assert_eq!(r.len(), 1);
+        let line = &r[0];
+        assert!(line.contains("rust (2)"), "{line}");
+        assert!(line.find("rust").unwrap() < line.find("php").unwrap(), "{line}");
+    }
 }
