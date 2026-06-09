@@ -7,12 +7,20 @@ use whatbot_core::{
     match_data, Command, CommandMeta, CommandResult, Context, Event, MatchData, StateSlot,
 };
 
-static RE_GREETING: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^(hey|hi|hello|word|sup|morning|good morning)[?!. ]*$").unwrap()
-});
+static RE_GREETING: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^(hey|hi|hello|word|sup|morning|good morning)[?!. ]*$").unwrap());
 
 const GREETINGS: &[&str] = &[
-    "hey", "sup", "what's up", "yo", "word", "hi", "hello", "greetings", "allo", "ayyy",
+    "hey",
+    "sup",
+    "what's up",
+    "yo",
+    "word",
+    "hi",
+    "hello",
+    "greetings",
+    "allo",
+    "ayyy",
 ];
 
 enum Action {
@@ -110,7 +118,15 @@ mod tests {
         let t = CommandTester::new().with_author("nichelle");
         let r = t.say(&cmd(), "hi").await;
         assert_eq!(r.len(), 1);
-        assert!(r[0].ends_with('.'), "reply should end with period: {}", r[0]);
-        assert!(r[0].contains("nichelle"), "reply should mention the author: {}", r[0]);
+        assert!(
+            r[0].ends_with('.'),
+            "reply should end with period: {}",
+            r[0]
+        );
+        assert!(
+            r[0].contains("nichelle"),
+            "reply should mention the author: {}",
+            r[0]
+        );
     }
 }

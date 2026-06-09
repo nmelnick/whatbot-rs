@@ -11,21 +11,20 @@ use whatbot_core::{
 };
 use whatbot_storage::Store;
 
-static RE_RANDOM: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^(\w+) (like|hate)s what\??$").unwrap()
-});
-static RE_CONTROVERSY: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^[. ]*fightin[g']? words\??$").unwrap()
-});
-static RE_EXTREMES: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^[. ]*what(?:'s| is)(?: the)? (best|worst)\??$").unwrap()
-});
+static RE_RANDOM: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^(\w+) (like|hate)s what\??$").unwrap());
+static RE_CONTROVERSY: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^[. ]*fightin[g']? words\??$").unwrap());
+static RE_EXTREMES: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^[. ]*what(?:'s| is)(?: the)? (best|worst)\??$").unwrap());
 static RE_WHO: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)^[. ]*who (hates|likes|loves|doesn't like|plussed|minused) (.+)").unwrap()
 });
 
 fn clean_subject(raw: &str) -> String {
-    let s = raw.trim().trim_end_matches(|c| matches!(c, '.' | '?' | '!'));
+    let s = raw
+        .trim()
+        .trim_end_matches(|c| matches!(c, '.' | '?' | '!'));
     let s = s.trim();
     for article in &["the ", "a ", "an "] {
         if s.to_lowercase().starts_with(article) {
@@ -103,7 +102,24 @@ impl Command for KarmaHistory {
         match action {
             Action::RandomExclusive { who, positive } => {
                 let verb = if positive { "like" } else { "hate" };
-                match self.store.karma().random_exclusive(&who, positive).await {
+                let identity = match self.store.persons().identity_id_for_display(&who).await {
+                    Ok(Some(id)) => id,
+                    Ok(None) => {
+                        return ctx
+                            .say(format!("I don't know who {who} is."))
+                            .with_stop(true);
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "karma_history identity lookup failed");
+                        return CommandResult::empty();
+                    }
+                };
+                match self
+                    .store
+                    .karma()
+                    .random_exclusive(identity, positive)
+                    .await
+                {
                     Ok(Some(subject)) => {
                         ctx.say(format!("{who} {verb}s {subject}.")).with_stop(true)
                     }
@@ -118,24 +134,22 @@ impl Command for KarmaHistory {
                     }
                 }
             }
-            Action::Controversial => {
-                match self.store.karma().controversial_subjects(10).await {
-                    Ok(subjects) if subjects.is_empty() => {
-                        ctx.say("No karma data yet.").with_stop(true)
-                    }
-                    Ok(subjects) => {
-                        let parts: Vec<String> = subjects
-                            .into_iter()
-                            .map(|s| format!("{} ({})", s.subject, s.score))
-                            .collect();
-                        ctx.say(parts.join(", ")).with_stop(true)
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "karma_history controversial failed");
-                        CommandResult::empty()
-                    }
+            Action::Controversial => match self.store.karma().controversial_subjects(10).await {
+                Ok(subjects) if subjects.is_empty() => {
+                    ctx.say("No karma data yet.").with_stop(true)
                 }
-            }
+                Ok(subjects) => {
+                    let parts: Vec<String> = subjects
+                        .into_iter()
+                        .map(|s| format!("{} ({})", s.subject, s.score))
+                        .collect();
+                    ctx.say(parts.join(", ")).with_stop(true)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "karma_history controversial failed");
+                    CommandResult::empty()
+                }
+            },
             Action::Extremes { best } => {
                 let label = if best { "best" } else { "worst" };
                 match self.store.karma().top_subjects(!best, 10).await {
@@ -147,8 +161,11 @@ impl Command for KarmaHistory {
                             .into_iter()
                             .map(|s| format!("{} ({})", s.subject, s.score))
                             .collect();
-                        ctx.say(format!("The {label} of everything is: {}", parts.join(", ")))
-                            .with_stop(true)
+                        ctx.say(format!(
+                            "The {label} of everything is: {}",
+                            parts.join(", ")
+                        ))
+                        .with_stop(true)
                     }
                     Err(e) => {
                         tracing::warn!(error = %e, "karma_history extremes failed");
@@ -158,7 +175,12 @@ impl Command for KarmaHistory {
             }
             Action::WhoVoted { subject, positive } => {
                 let requester = ctx.author.display.clone();
-                match self.store.karma().scores_for_subject(&subject, positive).await {
+                match self
+                    .store
+                    .karma()
+                    .scores_for_subject(&subject, positive)
+                    .await
+                {
                     Ok(voters) if voters.is_empty() => {
                         ctx.say(format!("{requester}: Nobody!")).with_stop(true)
                     }
@@ -226,7 +248,11 @@ mod tests {
         assert!(r[0].starts_with("The best of everything is:"), "{}", r[0]);
         assert!(r[0].contains("freebsd (3)"), "{}", r[0]);
         assert!(r[0].contains("solaris (1)"), "{}", r[0]);
-        assert!(r[0].find("freebsd").unwrap() < r[0].find("solaris").unwrap(), "{}", r[0]);
+        assert!(
+            r[0].find("freebsd").unwrap() < r[0].find("solaris").unwrap(),
+            "{}",
+            r[0]
+        );
     }
 
     #[tokio::test]
@@ -239,7 +265,11 @@ mod tests {
         let r = t.say(&kh, "what's the worst").await;
         assert_eq!(r.len(), 1);
         assert!(r[0].starts_with("The worst of everything is:"), "{}", r[0]);
-        assert!(r[0].find("javascript").unwrap() < r[0].find("php").unwrap(), "{}", r[0]);
+        assert!(
+            r[0].find("javascript").unwrap() < r[0].find("php").unwrap(),
+            "{}",
+            r[0]
+        );
     }
 
     #[tokio::test]
