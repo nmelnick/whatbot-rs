@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use whatbot_commands::{
-    Awareness, Echo, Excuse, Factoid, FactoidListener, Help, Karma, KarmaHistory, Seen,
+    Admin, Awareness, Echo, Excuse, Factoid, FactoidListener, Help, Karma, KarmaHistory, Seen,
     SeenRecorder,
 };
 use whatbot_core::dispatcher::IdentityResolver;
@@ -38,6 +38,7 @@ async fn main() -> anyhow::Result<()> {
     let store = Arc::new(Store::connect(&db.url).await?);
     store.migrate().await?;
     tracing::info!("connected to postgres and migrated");
+    let admin_store = store.clone();
     let seen_store = store.clone();
     let factoid_store = store.clone();
     let karma_store = store.clone();
@@ -47,9 +48,19 @@ async fn main() -> anyhow::Result<()> {
     let mut registry = Registry::new();
     registry.install_monitor(SeenRecorder::new(seen_store.clone()));
     tracing::info!(command = "seen_recorder", "installed");
-    install_command(&mut registry, "awareness", &cfg.commands, |_| Ok(Awareness::new()))?;
+    install_command(&mut registry, "admin", &cfg.commands, |_| {
+        Ok(Admin::new(admin_store.clone()))
+    })?;
+    install_command(&mut registry, "awareness", &cfg.commands, |_| {
+        Ok(Awareness::new())
+    })?;
     install_command(&mut registry, "echo", &cfg.commands, |_| Ok(Echo::new()))?;
-    install_command(&mut registry, "excuse", &cfg.commands, |_| Ok(Excuse::new()))?;
+    install_command(
+        &mut registry,
+        "excuse",
+        &cfg.commands,
+        |_| Ok(Excuse::new()),
+    )?;
     install_command(&mut registry, "factoid", &cfg.commands, |_| {
         Ok(Factoid::new(factoid_store.clone()))
     })?;

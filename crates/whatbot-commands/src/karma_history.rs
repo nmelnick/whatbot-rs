@@ -297,6 +297,9 @@ mod tests {
         assert_eq!(r.len(), 1);
         let line = &r[0];
         assert!(line.contains("rust (2)"), "{line}");
-        assert!(line.find("rust").unwrap() < line.find("php").unwrap(), "{line}");
+        assert!(
+            line.find("rust").unwrap() < line.find("php").unwrap(),
+            "{line}"
+        );
     }
 }
