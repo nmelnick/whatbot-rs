@@ -55,35 +55,41 @@ async fn run(args: Args) -> anyhow::Result<()> {
 
     let mut tx = store.pool().begin().await?;
 
-    info!("step 1/5: account");
+    info!("step 1/6: account");
     let handle_to_id = upsert_account(&sqlite, &mut tx)
         .await
-        .context("step 1/5 (account) failed")?;
+        .context("step 1/6 (account) failed")?;
     info!(count = handle_to_id.len(), "account imported");
 
-    info!("step 2/5: factoid");
+    info!("step 2/6: factoid");
     let factoid_id_map = migrate_factoid(&sqlite, &mut tx)
         .await
-        .context("step 2/5 (factoid) failed")?;
+        .context("step 2/6 (factoid) failed")?;
     info!(count = factoid_id_map.len(), "factoid imported");
 
-    info!("step 3/5: factoid facts");
+    info!("step 3/6: factoid facts");
     let facts = migrate_factoid_fact(&sqlite, &mut tx, &factoid_id_map, &handle_to_id)
         .await
-        .context("step 3/5 (factoid facts) failed")?;
+        .context("step 3/6 (factoid facts) failed")?;
     info!(count = facts, "facts imported");
 
-    info!("step 4/5: karma events");
+    info!("step 4/6: karma events");
     let karma = migrate_karma(&sqlite, &mut tx, &handle_to_id)
         .await
-        .context("step 4/5 (karma) failed")?;
+        .context("step 4/6 (karma) failed")?;
     info!(count = karma, "karma events imported");
 
-    info!("step 5/5: ignored factoids");
+    info!("step 5/6: ignored factoids");
     let n = migrate_ignored(&sqlite, &mut tx)
         .await
-        .context("step 5/5 (factoid_ignore) failed")?;
+        .context("step 5/6 (factoid_ignore) failed")?;
     info!(count = n, "ignored subjects imported as silent factoid");
+
+    info!("step 6/6: user aliases");
+    let linked = migrate_user_aliases(&sqlite, &mut tx)
+        .await
+        .context("step 6/6 (user_alias) failed")?;
+    info!(linked, "accounts linked to persons via user_alias");
 
     tx.commit().await?;
     info!("migration complete");
@@ -411,6 +417,81 @@ async fn migrate_karma(
         count += 1;
     }
     Ok(count)
+}
+
+/// Import user_alias rows into person + account.person_id
+async fn migrate_user_aliases(
+    sqlite: &rusqlite::Connection,
+    tx: &mut Transaction<'_, Postgres>,
+) -> anyhow::Result<usize> {
+    let mut stmt = match sqlite
+        .prepare("SELECT user, alias FROM user_alias")
+        .optional()?
+    {
+        Some(s) => s,
+        None => {
+            info!("user_alias table not found in source; skipping");
+            return Ok(0);
+        }
+    };
+
+    // Build a map: canonical_user → Vec<alias>
+    let rows = stmt
+        .query_map([], |row| Ok((text_bytes(row, 0)?, text_bytes(row, 1)?)))
+        .context("while iterating legacy `user_alias` rows")?;
+
+    let mut groups: HashMap<String, Vec<String>> = HashMap::new();
+    for (i, row) in rows.enumerate() {
+        let (user_bytes, alias_bytes) =
+            row.with_context(|| format!("while reading user_alias row #{i}"))?;
+        let user = decode_text(user_bytes, "user_alias.user", i).to_lowercase();
+        let alias = decode_text(alias_bytes, "user_alias.alias", i).to_lowercase();
+        groups.entry(user).or_default().push(alias);
+    }
+
+    let mut linked = 0usize;
+    for (canonical, aliases) in &groups {
+        let person_id: i64 = sqlx::query_scalar(
+            "INSERT INTO person (display) VALUES ($1)
+             ON CONFLICT DO NOTHING
+             RETURNING id",
+        )
+        .bind(canonical)
+        .fetch_optional(&mut **tx)
+        .await
+        .with_context(|| format!("while inserting person for {canonical:?}"))?
+        .unwrap_or_else(|| 0i64);
+
+        let person_id = if person_id == 0 {
+            sqlx::query_scalar("SELECT id FROM person WHERE LOWER(display) = LOWER($1)")
+                .bind(canonical)
+                .fetch_one(&mut **tx)
+                .await
+                .with_context(|| format!("while fetching existing person for {canonical:?}"))?
+        } else {
+            person_id
+        };
+
+        let mut names = aliases.clone();
+        names.push(canonical.clone());
+        for name in &names {
+            let updated = sqlx::query_scalar::<_, i64>(
+                "WITH updated AS (
+                     UPDATE account SET person_id = $1
+                     WHERE LOWER(handle) = $2 AND (person_id IS NULL OR person_id != $1)
+                     RETURNING 1
+                 )
+                 SELECT COUNT(*) FROM updated",
+            )
+            .bind(person_id)
+            .bind(name)
+            .fetch_one(&mut **tx)
+            .await
+            .with_context(|| format!("while linking account {name:?} to person {person_id}"))?;
+            linked += updated as usize;
+        }
+    }
+    Ok(linked)
 }
 
 async fn migrate_ignored(

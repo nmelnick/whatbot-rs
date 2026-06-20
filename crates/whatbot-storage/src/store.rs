@@ -8,6 +8,7 @@ use crate::account::AccountRepo;
 use crate::error::StorageError;
 use crate::factoid::FactoidRepo;
 use crate::karma::KarmaRepo;
+use crate::person::PersonRepo;
 use crate::seen::SeenRepo;
 
 #[derive(Clone)]
@@ -40,6 +41,10 @@ impl Store {
 
     pub fn karma(&self) -> KarmaRepo<'_> {
         KarmaRepo::new(&self.pool)
+    }
+
+    pub fn persons(&self) -> PersonRepo<'_> {
+        PersonRepo::new(&self.pool)
     }
 
     pub fn seen(&self) -> SeenRepo<'_> {

@@ -156,6 +156,7 @@ impl<'a> KarmaRepo<'a> {
     }
 
     /// Who scored `subject` in the given direction, ranked by vote count.
+    /// Groups by person identity.
     pub async fn scores_for_subject(
         &self,
         subject: &str,
@@ -164,11 +165,13 @@ impl<'a> KarmaRepo<'a> {
         let norm = subject.to_lowercase();
         let delta: i32 = if positive { 1 } else { -1 };
         let rows = sqlx::query(
-            "SELECT a.display, SUM(k.delta)::bigint AS total \
+            "SELECT COALESCE(p.display, a.display) AS display, \
+                    SUM(k.delta)::bigint AS total \
              FROM karma k \
              JOIN account a ON k.account_id = a.id \
+             LEFT JOIN person p ON a.person_id = p.id \
              WHERE k.subject_norm = $1 AND k.delta = $2 \
-             GROUP BY a.id, a.display \
+             GROUP BY COALESCE(a.person_id, a.id), COALESCE(p.display, a.display) \
              ORDER BY ABS(SUM(k.delta)) DESC",
         )
         .bind(&norm)
@@ -184,30 +187,30 @@ impl<'a> KarmaRepo<'a> {
             .collect())
     }
 
-    /// A random subject that `display_name` voted on exclusively
+    /// A random subject that the identity voted on exclusively
     pub async fn random_exclusive(
         &self,
-        display_name: &str,
+        identity_id: i64,
         positive: bool,
     ) -> Result<Option<String>, StorageError> {
-        let name = display_name.to_lowercase();
         let delta: i32 = if positive { 1 } else { -1 };
         let row = sqlx::query(
             "SELECT MIN(k.subject) AS subject \
              FROM karma k \
              JOIN account a ON k.account_id = a.id \
              WHERE k.delta = $1 \
-               AND LOWER(a.display) = $2 \
+               AND COALESCE(a.person_id, a.id) = $2 \
                AND k.subject_norm NOT IN ( \
                    SELECT k2.subject_norm FROM karma k2 \
                    JOIN account a2 ON k2.account_id = a2.id \
-                   WHERE k2.delta = $1 AND LOWER(a2.display) != $2 \
+                   WHERE k2.delta = $1 \
+                     AND COALESCE(a2.person_id, a2.id) != $2 \
                ) \
              GROUP BY k.subject_norm \
              ORDER BY RANDOM() LIMIT 1",
         )
         .bind(delta)
-        .bind(&name)
+        .bind(identity_id)
         .fetch_optional(self.pool)
         .await?;
         Ok(row.and_then(|r| r.get("subject")))

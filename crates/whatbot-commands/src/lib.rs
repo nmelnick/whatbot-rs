@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod awareness;
 pub mod echo;
 pub mod excuse;
@@ -7,6 +8,7 @@ pub mod karma;
 pub mod karma_history;
 pub mod seen;
 
+pub use admin::Admin;
 pub use awareness::Awareness;
 pub use echo::Echo;
 pub use excuse::Excuse;
