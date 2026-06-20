@@ -171,14 +171,11 @@ impl Command for Admin {
                     }
                 };
 
-                match acct.person_id {
-                    Some(id) => id,
-                    None => {
-                        return ctx
-                            .say(format!("{handle} is not linked to anyone."))
-                            .with_stop(true);
-                    }
-                };
+                if acct.person_id.is_none() {
+                    return ctx
+                        .say(format!("{handle} is not linked to anyone."))
+                        .with_stop(true);
+                }
 
                 if let Err(e) = self.store.persons().unlink_account(acct.id).await {
                     tracing::warn!(error = %e, "admin unlink failed");
